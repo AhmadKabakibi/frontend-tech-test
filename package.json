@@ -2,18 +2,30 @@
   "name": "test-candidates",
   "version": "0.0.1",
   "description": "test back - front",
-  "main": "server.js",
+  "main": "server/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test --env=jsdom",
+    "eject": "react-scripts eject",
+    "server": "npm run babel-node -- server/server.js",
+    "dev:server": "nodemon --exec npm run babel-node -- server/server.js"
   },
   "keywords": [
     "test",
     "travix"
   ],
-  "author": "spartans",
+  "author": "akabakibi",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.14.0"
+    "classnames": "^2.2.5",
+    "express": "^4.16.3",
+    "firebase": "^5.0.3",
+    "react": "^16.3.2",
+    "react-dom": "^16.3.2",
+    "react-scripts": "1.1.4"
+  },
+  "devDependencies": {
+    "babel-preset-travix": "^1.2.0"
   }
 }
