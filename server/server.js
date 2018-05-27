@@ -1,141 +1,93 @@
-'use strict';
+import express from 'express';
+import path from 'path';
+import bodyParser from 'body-parser';
+import loggerDev from 'morgan';
+import { Logger, configureConsoleTransport } from 'travix-logger';
+import mongoose from 'mongoose';
+import SourceMapSupport from 'source-map-support';
+import http from 'http';
+import socket from 'socket.io';
 
-const app = require('express')();
-const tasksContainer = require('./tasks.json');
+import todoRoutes from './routes/router';
+import * as todoController from './controllers/todo';
 
-/**
- * GET /tasks
- * 
- * Return the list of tasks with status code 200.
- */
-app.get('/tasks', (req, res) => {
-  return res.status(200).json(tasksContainer);
-});
+const logger = new Logger({
+    transports: [
+      configureConsoleTransport()
+    ]
+ });
 
-/**
- * Get /task/:id
- * 
- * id: Number
- * 
- * Return the task for the given id.
- * 
- * If found return status code 200 and the resource.
- * If not found return status code 404.
- * If id is not valid number return status code 400.
- */
-app.get('/task/:id', (req, res) => {
-  const id = parseInt(req.params.id, 10);
+const app = express();
 
-  if (!Number.isNaN(id)) {
-    const task = tasks.Container.find((item) => item.id === id);
-    
-    if (task !== null) {
-      return res.status(200).json({
-        task,
-      });
-    } else {
-      return res.status(404).json({
-        message: 'Not found.',
-      });
-    }
-  } else {
-    return res.status(400).json({
-      message: 'Bad request.',
-    });
-  }
-});
+const server = http.Server(app);
+const io = socket(server);
 
-/**
- * PUT /task/update/:id/:title/:description
- * 
- * id: Number
- * title: string
- * description: string
- * 
- * Update the task with the given id.
- * If the task is found and update as well, return a status code 204.
- * If the task is not found, return a status code 404.
- * If the provided id is not a valid number return a status code 400.
- */
-app.put('/task/update/:id/:title/:description', (req, res) => {
-  const id = parseInt(req.params.id, 10);
-
-  if (!Number.isNaN(id)) {
-    const task = tasksContainer.tasks.find(item => item.id === id);
-
-    if (task !== null) {
-      task.title = req.params.title;
-      task.description = req.params.description;
-      return res.status(204);
-    } else {
-      return res.status(404).json({
-        message: 'Not found',
-      });
-    }
-  } else {
-    return res.status(400).json({
-      message: 'Bad request',
-    });
-  }
-});
-
-/**
- * POST /task/create/:title/:description
- * 
- * title: string
- * description: string
- * 
- * Add a new task to the array tasksContainer.tasks with the given title and description.
- * Return status code 201.
- */
-app.post('/task/create/:title/:description', (req, res) => {
-  const task = {
-    id: tasksContainer.tasks.length,
-    title: req.params.title,
-    description: req.params.description,
-  };
-
-  tasksContainer.tasks.push(task);
-
-  return res.status(201).json({
-    message: 'Resource created',
+// socket.io connection
+io.on('connection', (socket) => {
+  console.log("Connected to Socket!!"+ socket.id);
+  // Receiving Todos from client
+  socket.on('addTodo', (Todo) => {
+    console.log('socketData: '+JSON.stringify(Todo));
+    todoController.addTodo(io,Todo);
   });
+
+  // Receiving Updated Todo from client
+  socket.on('updateTodo', (Todo) => {
+    console.log('socketData: '+JSON.stringify(Todo));
+    todoController.updateTodo(io,Todo);
+  });
+
+  // Receiving Todo to Delete
+  socket.on('deleteTodo', (Todo) => {
+    console.log('socketData: '+JSON.stringify(Todo));
+    todoController.deleteTodo(io,Todo);
+  });
+})
+
+// allow-cors
+app.use(function(req,res,next) {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  next();
+})
+
+// configure app
+app.use(loggerDev('dev'));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended:true }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+
+// set the port
+const port = process.env.PORT || 9001;
+
+// connect to database
+mongoose.Promise = global.Promise;
+mongoose.connect('mongodb://localhost/todo-app');
+
+const db = mongoose.connection;
+db.on('error', console.error.bind(console, 'connection error:'));
+db.once('open', function() {
+  // we're connected!
+  console.log("db we're connected!");
 });
 
-/**
- * DELETE /task/delete/:id
- * 
- * id: Number
- * 
- * Delete the task linked to the  given id.
- * If the task is found and deleted as well, return a status code 204.
- * If the task is not found, return a status code 404.
- * If the provided id is not a valid number return a status code 400.
- */
-app.delete('/task/delete/:id', (req, res) => {
-  const id = parseInt(req.params.id, 10);
+// add Source Map Support
+SourceMapSupport.install();
 
-  if (!Number.isNaN(id)) {
-    const task = tasksContainer.tasks.find(item => item.id === id);
-  
-    if (task !== null) {
-      const taskIndex = tasksContainer.tasks;
-      tasksContainer.tasks.splice(taskIndex, 1);
-      return res.status(200).json({
-        message: 'Updated successfully',
-      });
-    } else {
-      return es.status(404).json({
-        message: 'Not found',
-      });
-    }
-  } else {
-    return res.status(400).json({
-      message: 'Bad request',
-    });
-  }
+app.use('/api', todoRoutes);
+
+app.get('/', (req,res) => {
+  return res.end('Travix Todo Api working');
 });
 
-app.listen(9001, () => {
-  process.stdout.write('the server is available on http://localhost:9001/\n');
+// catch 404
+app.use((req, res, next) => {
+  res.status(404).send('<h2 align=center>Page Not Found! :( </h2>');
+});
+
+
+// start the server
+server.listen(port,() => {
+  console.log(`App Server Listening at ${port}`);
 });
